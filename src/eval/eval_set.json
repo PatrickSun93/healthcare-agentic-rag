@@ -1,0 +1,26 @@
+[
+  {
+    "question": "What are the prior authorization criteria for metformin extended-release?",
+    "expected_source": "metformin_prior_auth.md"
+  },
+  {
+    "question": "Which blood pressure readings define stage 2 hypertension?",
+    "expected_source": "hypertension_guideline.md"
+  },
+  {
+    "question": "What steps are included in the one-hour sepsis bundle?",
+    "expected_source": "sepsis_bundle.md"
+  },
+  {
+    "question": "What is the preferred first-line agent for a patient with both hypertension and type 2 diabetes?",
+    "expected_source": "hypertension_guideline.md"
+  },
+  {
+    "question": "What lactate level triggers the sepsis protocol?",
+    "expected_source": "sepsis_bundle.md"
+  },
+  {
+    "question": "What eGFR is a contraindication for metformin?",
+    "expected_source": "metformin_prior_auth.md"
+  }
+]
