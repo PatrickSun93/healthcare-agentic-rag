@@ -36,7 +36,8 @@ def main() -> None:
     q.add_argument("--graph", action="store_true", help="run via the LangGraph agent graph")
     q.add_argument("--selfrag", action="store_true", help="LangGraph self-RAG loop (grade + retry if ungrounded)")
 
-    sub.add_parser("eval", help="run Recall@k + MRR over the golden set")
+    ev = sub.add_parser("eval", help="run Recall@k + MRR over the golden set; writes eval_results/<ts>.json")
+    ev.add_argument("--k", type=int, default=5)
 
     pdf = sub.add_parser("pdf2md", help="convert PDF(s) to .md transcripts (text layer + OCR fallback)")
     pdf.add_argument("path", help="a .pdf file or a directory containing PDFs")
@@ -68,7 +69,7 @@ def main() -> None:
     elif args.cmd == "eval":
         from src.eval.evaluate import evaluate
 
-        evaluate()
+        evaluate(k=args.k)
     elif args.cmd == "pdf2md":
         from src import config as C
         from src.pdf import pdf_to_md_file

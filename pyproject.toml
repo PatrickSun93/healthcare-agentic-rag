@@ -1,0 +1,18 @@
+# Tooling config only — the project is run from source (python cli.py), not installed as a package.
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+# Pinned explicitly so local `ruff check` and CI agree regardless of ruff's shifting defaults.
+select = ["E", "F", "I", "W", "B", "UP"]
+ignore = ["B905"]           # zip(strict=) everywhere is noise for lists built together on the previous line
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]          # `import src` from tests/ without installing anything
+addopts = "-ra"
+markers = [
+  "integration: needs a live Postgres+pgvector (set PGVECTOR_URL; `docker compose up -d pgvector`)",
+]

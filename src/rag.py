@@ -1,21 +1,20 @@
 """Grounded, cited generation over retrieved context.
 
-Grounding rules live in SYSTEM: answer only from context, cite every claim, refuse when unsupported.
-This is the anti-hallucination core — in healthcare an unsupported answer must become a refusal.
+Grounding rules live in the versioned `grounded_answer` prompt (src/prompts/): answer only from context,
+cite every claim, refuse when unsupported. This is the anti-hallucination core — in healthcare an
+unsupported answer must become a refusal.
 """
 from __future__ import annotations
 
+from . import prompts
 from .llm import chat
 from .retrieve import retrieve
+from .tracing import set_attrs, span
 
-SYSTEM = (
-    "You are a clinical knowledge assistant. Answer ONLY using the provided context. "
-    "Cite every claim with [n], where n is the numbered context chunk it came from. "
-    "If the context does not contain the answer, reply EXACTLY: "
-    "'I don't have enough grounded information to answer that.' Never invent facts, drugs, or doses."
-)
+GROUNDED = prompts.get("grounded_answer")
+SYSTEM = GROUNDED.text
 
-REFUSAL = "I don't have enough grounded information to answer that."
+REFUSAL = "I don't have enough grounded information to answer that."  # must match the prompt verbatim
 
 
 def _format_context(chunks: list[dict]) -> str:
@@ -25,16 +24,17 @@ def _format_context(chunks: list[dict]) -> str:
     )
 
 
-def query(question: str, tenant: str | None = None, final_k: int | None = None) -> dict:
-    chunks = retrieve(question, tenant=tenant, final_k=final_k)
-    if not chunks:
-        return {"answer": REFUSAL, "citations": [], "contexts": []}
+def build_user_prompt(question: str, chunks: list[dict]) -> str:
+    return f"Context:\n{_format_context(chunks)}\n\nQuestion: {question}\n\nGrounded, cited answer:"
 
-    user = (
-        f"Context:\n{_format_context(chunks)}\n\n"
-        f"Question: {question}\n\nGrounded, cited answer:"
-    )
-    answer = chat(SYSTEM, user)
+
+def query(question: str, tenant: str | None = None, final_k: int | None = None) -> dict:
+    with span("rag.query", prompt=GROUNDED.id, tenant=tenant):
+        chunks = retrieve(question, tenant=tenant, final_k=final_k)
+        set_attrs(n_contexts=len(chunks), refused=not chunks)
+        if not chunks:
+            return {"answer": REFUSAL, "citations": [], "contexts": []}
+        answer = chat(SYSTEM, build_user_prompt(question, chunks))
     return {
         "answer": answer,
         "citations": [

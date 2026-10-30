@@ -21,8 +21,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # make `src` importable from repo root
 
-from src import config as C            # noqa: E402
-from src import ingest, retrieve       # noqa: E402
+from src import config as C  # noqa: E402
+from src import ingest, retrieve  # noqa: E402
 from src.eval.evaluate import evaluate  # noqa: E402
 
 
@@ -37,8 +37,8 @@ def run(sizes: list[int], overlaps: list[float], k: int) -> list[dict]:
             print(f"\n>>> size={size} overlap={overlap}")
             ingest.main()              # rebuilds the Qdrant collection + chunks.json
             retrieve.reset_cache()     # drop cached chunks/BM25 so eval sees the new index
-            metrics = evaluate(k=k, verbose=False)
-            rows.append({"size": size, "overlap": overlap, **metrics})
+            result = evaluate(k=k, verbose=False, out_dir=None)  # one record per cell is noise; the table is the output
+            rows.append({"size": size, "overlap": overlap, **result["metrics"]})
     return rows
 
 

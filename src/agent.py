@@ -8,31 +8,32 @@ from __future__ import annotations
 
 import json
 
-from . import rag
+from . import prompts, rag
 from .llm import chat
+from .tracing import set_attrs, span
 
-ROUTER_SYSTEM = (
-    "You are a router for a clinical assistant. Decide if the user's message needs retrieval from a "
-    "clinical knowledge base. Reply with ONLY a compact JSON object: "
-    '{"retrieve": true|false, "search_query": "..."}. '
-    "Use retrieve=false for greetings/chit-chat; otherwise retrieve=true with an optimized search query."
-)
+ROUTER_SYSTEM = prompts.get("router").text
+CHITCHAT_SYSTEM = prompts.get("chitchat").text
 
 
 def _route(question: str) -> dict:
-    raw = chat(ROUTER_SYSTEM, question)
-    try:
-        start, end = raw.find("{"), raw.rfind("}")
-        return json.loads(raw[start : end + 1])
-    except Exception:
-        return {"retrieve": True, "search_query": question}  # fail safe: retrieve
+    with span("agent.route", prompt=prompts.get("router").id):
+        raw = chat(ROUTER_SYSTEM, question)
+        try:
+            start, end = raw.find("{"), raw.rfind("}")
+            decision = json.loads(raw[start : end + 1])
+        except Exception:
+            set_attrs(parse_failed=True)
+            decision = {"retrieve": True, "search_query": question}  # fail safe: retrieve
+        set_attrs(retrieve=bool(decision.get("retrieve", True)))
+        return decision
 
 
 def answer(question: str, tenant: str | None = None) -> dict:
     decision = _route(question)
     if not decision.get("retrieve", True):
         return {
-            "answer": chat("You are a helpful assistant.", question),
+            "answer": chat(CHITCHAT_SYSTEM, question),
             "used_retrieval": False,
             "citations": [],
         }

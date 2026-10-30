@@ -14,6 +14,7 @@ from rank_bm25 import BM25Okapi
 
 from . import config as C
 from .llm import embed_query
+from .tracing import set_attrs, span
 
 
 @lru_cache(maxsize=1)
@@ -41,16 +42,22 @@ def reset_cache() -> None:
 
 
 def dense_search(query: str, k: int, tenant: str | None = None) -> list[tuple[int, float]]:
-    return _store().search(embed_query(query), k, tenant)
+    with span("retrieve.dense", backend=C.VECTOR_BACKEND, k=k, tenant=tenant):
+        hits = _store().search(embed_query(query), k, tenant)
+        set_attrs(n_hits=len(hits))
+        return hits
 
 
 def sparse_search(query: str, k: int, tenant: str | None = None) -> list[tuple[int, float]]:
-    chunks = _chunks()
-    scores = _bm25().get_scores(query.lower().split())
-    order = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
-    if tenant:  # BM25 has no native filter -> post-filter by payload
-        order = [i for i in order if chunks[i].get("tenant") == tenant]
-    return [(i, float(scores[i])) for i in order[:k]]
+    with span("retrieve.sparse", k=k, tenant=tenant):
+        chunks = _chunks()
+        scores = _bm25().get_scores(query.lower().split())
+        order = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+        if tenant:  # BM25 has no native filter -> post-filter by payload
+            order = [i for i in order if chunks[i].get("tenant") == tenant]
+        hits = [(i, float(scores[i])) for i in order[:k]]
+        set_attrs(n_hits=len(hits))
+        return hits
 
 
 def rrf(dense: list[tuple[int, float]], sparse: list[tuple[int, float]], k: int = C.RRF_K):
@@ -67,19 +74,23 @@ def _rerank(query: str, cand_ids: list[int]) -> list[int]:
     """Cross-encoder precision re-rank. Lazy import: pulls sentence-transformers (heavier)."""
     from sentence_transformers import CrossEncoder
 
-    ce = CrossEncoder(C.RERANK_MODEL)
-    chunks = _chunks()
-    scores = ce.predict([(query, chunks[i]["text"]) for i in cand_ids])
-    return [cid for cid, _ in sorted(zip(cand_ids, scores), key=lambda x: x[1], reverse=True)]
+    with span("retrieve.rerank", model=C.RERANK_MODEL, n_candidates=len(cand_ids)):
+        ce = CrossEncoder(C.RERANK_MODEL)
+        chunks = _chunks()
+        scores = ce.predict([(query, chunks[i]["text"]) for i in cand_ids])
+        return [cid for cid, _ in sorted(zip(cand_ids, scores), key=lambda x: x[1], reverse=True)]
 
 
 def retrieve(query: str, tenant: str | None = None, final_k: int | None = None) -> list[dict]:
     final_k = final_k or C.FINAL_K
-    dense = dense_search(query, C.TOP_K_DENSE, tenant)
-    sparse = sparse_search(query, C.TOP_K_SPARSE, tenant)
-    fused = rrf(dense, sparse)
-    cand_ids = [cid for cid, _ in fused[: max(final_k * 3, C.FINAL_K)]]
-    if C.RERANK and cand_ids:
-        cand_ids = _rerank(query, cand_ids)
-    chunks = _chunks()
-    return [chunks[i] for i in cand_ids[:final_k]]
+    with span("retrieve", tenant=tenant, final_k=final_k, rerank=C.RERANK):
+        dense = dense_search(query, C.TOP_K_DENSE, tenant)
+        sparse = sparse_search(query, C.TOP_K_SPARSE, tenant)
+        fused = rrf(dense, sparse)
+        cand_ids = [cid for cid, _ in fused[: max(final_k * 3, C.FINAL_K)]]
+        if C.RERANK and cand_ids:
+            cand_ids = _rerank(query, cand_ids)
+        chunks = _chunks()
+        out = [chunks[i] for i in cand_ids[:final_k]]
+        set_attrs(n_fused=len(fused), n_results=len(out))
+        return out

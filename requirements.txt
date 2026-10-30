@@ -14,3 +14,5 @@ pymupdf>=1.23            # PDF text extraction + page rendering
 # Scanned-PDF OCR (local vision, no deps):  set OCR_BACKEND=ollama  +  ollama pull llama3.2-vision
 # LangGraph agent graph (query --graph):    pip install "langgraph>=0.2"
 # Pinecone vector backend (VECTOR_BACKEND=pinecone):  pip install "pinecone>=5"
+# pgvector backend (VECTOR_BACKEND=pgvector):        pip install "psycopg[binary]>=3.1"
+# Tracing (TRACING=console|otlp):   pip install "opentelemetry-sdk>=1.25" "opentelemetry-exporter-otlp-proto-http>=1.25"

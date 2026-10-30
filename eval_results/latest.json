@@ -1,0 +1,113 @@
+{
+  "run_at": "2026-10-30T22:00:42+00:00",
+  "prompts": {
+    "grounded_answer": "v1",
+    "router": "v1",
+    "grader": "v1",
+    "query_rewrite": "v1",
+    "chitchat": "v1"
+  },
+  "models": {
+    "llm": "ollama/gemma4:12b",
+    "embedding": "ollama/nomic-embed-text"
+  },
+  "retrieval": {
+    "vector_backend": "pgvector",
+    "top_k_dense": 20,
+    "top_k_sparse": 20,
+    "rrf_k": 60,
+    "final_k": 5,
+    "rerank": false
+  },
+  "chunking": {
+    "max_tokens": 400,
+    "overlap": 60
+  },
+  "eval_set": "eval_set.json",
+  "metrics": {
+    "recall_at_k": 1.0,
+    "mrr": 0.8333333333333334,
+    "n": 6,
+    "k": 5
+  },
+  "cases": [
+    {
+      "question": "What are the prior authorization criteria for metformin extended-release?",
+      "expected": "metformin_prior_auth.md",
+      "got": [
+        "metformin_prior_auth.md",
+        "metformin_prior_auth.md",
+        "metformin_prior_auth.md",
+        "discharge_summary.md",
+        "hypertension_guideline.md"
+      ],
+      "hit": true,
+      "rr": 1.0
+    },
+    {
+      "question": "Which blood pressure readings define stage 2 hypertension?",
+      "expected": "hypertension_guideline.md",
+      "got": [
+        "discharge_summary.md",
+        "hypertension_guideline.md",
+        "hypertension_guideline.md",
+        "sepsis_bundle.md",
+        "sepsis_bundle.md"
+      ],
+      "hit": true,
+      "rr": 0.5
+    },
+    {
+      "question": "What steps are included in the one-hour sepsis bundle?",
+      "expected": "sepsis_bundle.md",
+      "got": [
+        "discharge_summary.md",
+        "sepsis_bundle.md",
+        "sepsis_bundle.md",
+        "sepsis_bundle.md",
+        "metformin_prior_auth.md"
+      ],
+      "hit": true,
+      "rr": 0.5
+    },
+    {
+      "question": "What is the preferred first-line agent for a patient with both hypertension and type 2 diabetes?",
+      "expected": "hypertension_guideline.md",
+      "got": [
+        "hypertension_guideline.md",
+        "discharge_summary.md",
+        "metformin_prior_auth.md",
+        "metformin_prior_auth.md",
+        "sepsis_bundle.md"
+      ],
+      "hit": true,
+      "rr": 1.0
+    },
+    {
+      "question": "What lactate level triggers the sepsis protocol?",
+      "expected": "sepsis_bundle.md",
+      "got": [
+        "sepsis_bundle.md",
+        "sepsis_bundle.md",
+        "discharge_summary.md",
+        "sepsis_bundle.md",
+        "hypertension_guideline.md"
+      ],
+      "hit": true,
+      "rr": 1.0
+    },
+    {
+      "question": "What eGFR is a contraindication for metformin?",
+      "expected": "metformin_prior_auth.md",
+      "got": [
+        "metformin_prior_auth.md",
+        "metformin_prior_auth.md",
+        "metformin_prior_auth.md",
+        "hypertension_guideline.md",
+        "discharge_summary.md"
+      ],
+      "hit": true,
+      "rr": 1.0
+    }
+  ]
+}
