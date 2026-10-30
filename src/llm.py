@@ -13,10 +13,16 @@ import re
 import httpx
 
 from . import config as C
+from .tracing import span
 
 
 # ---------------- Embeddings ----------------
 def embed_texts(texts: list[str]) -> list[list[float]]:
+    with span("embed", model=describe()["embedding"], n_texts=len(texts)):
+        return _embed_texts(texts)
+
+
+def _embed_texts(texts: list[str]) -> list[list[float]]:
     if C.EMBED_PROVIDER == "hash":
         return [hash_embed(t) for t in texts]
 
@@ -78,6 +84,11 @@ def describe() -> dict[str, str]:
 
 # ---------------- Chat ----------------
 def chat(system: str, user: str) -> str:
+    with span("llm.chat", model=describe()["llm"], prompt_chars=len(system) + len(user)):
+        return _chat(system, user)
+
+
+def _chat(system: str, user: str) -> str:
     if C.LLM_PROVIDER == "ollama":
         with httpx.Client(timeout=300) as client:
             r = client.post(

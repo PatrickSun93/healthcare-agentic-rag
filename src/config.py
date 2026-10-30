@@ -51,6 +51,10 @@ OCR_VISION_MODEL = os.getenv("OCR_VISION_MODEL", "llama3.2-vision")
 OCR_MIN_CHARS    = int(os.getenv("OCR_MIN_CHARS", "20"))        # < this on a page => treat as scanned, OCR it
 OCR_DPI          = int(os.getenv("OCR_DPI", "200"))
 
+# --- Tracing: off | console | otlp (OTLP/HTTP to OTEL_EXPORTER_OTLP_ENDPOINT) ---
+TRACING           = os.getenv("TRACING", "off")
+OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "healthcare-agentic-rag")
+
 # --- Paths ---
 ROOT        = Path(__file__).resolve().parent.parent
 DATA_DIR    = Path(os.getenv("DATA_DIR", ROOT / "data" / "sample_docs"))

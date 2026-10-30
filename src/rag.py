@@ -9,6 +9,7 @@ from __future__ import annotations
 from . import prompts
 from .llm import chat
 from .retrieve import retrieve
+from .tracing import set_attrs, span
 
 GROUNDED = prompts.get("grounded_answer")
 SYSTEM = GROUNDED.text
@@ -28,11 +29,12 @@ def build_user_prompt(question: str, chunks: list[dict]) -> str:
 
 
 def query(question: str, tenant: str | None = None, final_k: int | None = None) -> dict:
-    chunks = retrieve(question, tenant=tenant, final_k=final_k)
-    if not chunks:
-        return {"answer": REFUSAL, "citations": [], "contexts": []}
-
-    answer = chat(SYSTEM, build_user_prompt(question, chunks))
+    with span("rag.query", prompt=GROUNDED.id, tenant=tenant):
+        chunks = retrieve(question, tenant=tenant, final_k=final_k)
+        set_attrs(n_contexts=len(chunks), refused=not chunks)
+        if not chunks:
+            return {"answer": REFUSAL, "citations": [], "contexts": []}
+        answer = chat(SYSTEM, build_user_prompt(question, chunks))
     return {
         "answer": answer,
         "citations": [

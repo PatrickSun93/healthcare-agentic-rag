@@ -46,9 +46,33 @@ class FakeStore:
 @pytest.fixture(autouse=True)
 def _hash_embeddings(monkeypatch):
     monkeypatch.setattr(C, "EMBED_PROVIDER", "hash")
+    monkeypatch.setattr(C, "TRACING", "off")  # tests install their own in-memory exporter (see `spans`)
     retrieve.reset_cache()
     yield
     retrieve.reset_cache()
+
+
+@pytest.fixture(scope="session")
+def _span_exporter():
+    """One in-memory OpenTelemetry exporter for the whole session (a TracerProvider can only be set once)."""
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
+    return exporter
+
+
+@pytest.fixture
+def spans(_span_exporter):
+    """Finished spans emitted during the test: `spans.get_finished_spans()`."""
+    _span_exporter.clear()
+    yield _span_exporter
+    _span_exporter.clear()
 
 
 @pytest.fixture

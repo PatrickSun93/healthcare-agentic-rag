@@ -16,6 +16,7 @@ from langgraph.graph import END, START, StateGraph
 from . import agent, prompts, rag
 from .llm import chat
 from .retrieve import retrieve
+from .tracing import set_attrs, span, traced
 
 GRADER_SYSTEM = prompts.get("grader").text
 REWRITE_SYSTEM = prompts.get("query_rewrite").text
@@ -34,6 +35,7 @@ class RAGState(TypedDict, total=False):
     attempts: int
 
 
+@traced("graph.route")
 def _route(state: RAGState) -> dict:
     decision = agent._route(state["question"])
     return {
@@ -42,12 +44,15 @@ def _route(state: RAGState) -> dict:
     }
 
 
+@traced("graph.retrieve")
 def _retrieve(state: RAGState) -> dict:
     return {"contexts": retrieve(state["search_query"], tenant=state.get("tenant"))}
 
 
+@traced("graph.generate")
 def _generate(state: RAGState) -> dict:
     chunks = state.get("contexts") or []
+    set_attrs(prompt=rag.GROUNDED.id, n_contexts=len(chunks), refused=not chunks)
     if not chunks:
         return {"answer": rag.REFUSAL, "citations": [], "used_retrieval": True}
     return {
@@ -60,6 +65,7 @@ def _generate(state: RAGState) -> dict:
     }
 
 
+@traced("graph.chitchat")
 def _chitchat(state: RAGState) -> dict:
     return {
         "answer": chat(agent.CHITCHAT_SYSTEM, state["question"]),
@@ -93,7 +99,8 @@ def answer(question: str, tenant: str | None = None) -> dict:
     global _GRAPH
     if _GRAPH is None:
         _GRAPH = build_graph()
-    return _GRAPH.invoke({"question": question, "tenant": tenant})
+    with span("graph.invoke", graph="rag", tenant=tenant):
+        return _GRAPH.invoke({"question": question, "tenant": tenant})
 
 
 # ---- self-RAG: a graph with a CYCLE (grade the answer; if ungrounded, broaden the query + retry) ----
@@ -101,24 +108,30 @@ def answer(question: str, tenant: str | None = None) -> dict:
 MAX_ATTEMPTS = 2
 
 
+@traced("graph.grade")
 def _grade(state: RAGState) -> dict:
     answer = state.get("answer", "")
     if answer.strip() == rag.REFUSAL:
+        set_attrs(grounded=False, attempt=state.get("attempts", 1))
         return {"grounded": False}  # nothing found yet — a broader query might help
     verdict = chat(
         GRADER_SYSTEM,
         f"Context:\n{rag._format_context(state.get('contexts') or [])}\n\n"
         f"Answer:\n{answer}\n\nIs EVERY claim in the answer directly supported by the context? yes or no.",
     )
-    return {"grounded": verdict.strip().lower().startswith("y")}
+    grounded = verdict.strip().lower().startswith("y")
+    set_attrs(grounded=grounded, attempt=state.get("attempts", 1))
+    return {"grounded": grounded}
 
 
+@traced("graph.rewrite")
 def _rewrite(state: RAGState) -> dict:
     current = state.get("search_query") or state["question"]
     broader = chat(
         REWRITE_SYSTEM,
         f"Question: {state['question']}\nCurrent query: {current}\nBroader query:",
     ).strip().strip('"')
+    set_attrs(attempt=state.get("attempts", 1) + 1)
     return {"search_query": broader or current, "attempts": state.get("attempts", 1) + 1}
 
 
@@ -153,4 +166,5 @@ def answer_selfrag(question: str, tenant: str | None = None) -> dict:
     global _SELFRAG
     if _SELFRAG is None:
         _SELFRAG = build_selfrag_graph()
-    return _SELFRAG.invoke({"question": question, "tenant": tenant, "attempts": 1})
+    with span("graph.invoke", graph="selfrag", tenant=tenant):
+        return _SELFRAG.invoke({"question": question, "tenant": tenant, "attempts": 1})
