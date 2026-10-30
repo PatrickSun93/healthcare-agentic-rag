@@ -1,0 +1,7 @@
+# Tests + lint + the optional backends CI exercises. `pip install -r requirements-dev.txt` pulls core too.
+-r requirements.txt
+pytest>=8
+ruff>=0.6
+psycopg[binary]>=3.1                       # pgvector backend (integration tests)
+langgraph>=0.2                             # graph tests (fake LLM, real StateGraph)
+opentelemetry-sdk>=1.25                    # tracing tests (in-memory exporter)
