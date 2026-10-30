@@ -13,9 +13,12 @@ from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from . import agent, rag
+from . import agent, prompts, rag
 from .llm import chat
 from .retrieve import retrieve
+
+GRADER_SYSTEM = prompts.get("grader").text
+REWRITE_SYSTEM = prompts.get("query_rewrite").text
 
 
 class RAGState(TypedDict, total=False):
@@ -47,12 +50,8 @@ def _generate(state: RAGState) -> dict:
     chunks = state.get("contexts") or []
     if not chunks:
         return {"answer": rag.REFUSAL, "citations": [], "used_retrieval": True}
-    user = (
-        f"Context:\n{rag._format_context(chunks)}\n\n"
-        f"Question: {state['question']}\n\nGrounded, cited answer:"
-    )
     return {
-        "answer": chat(rag.SYSTEM, user),
+        "answer": chat(rag.SYSTEM, rag.build_user_prompt(state["question"], chunks)),
         "citations": [
             {"n": n, "source": c["source"], "section": c["section"], "chunk_id": c["chunk_id"]}
             for n, c in enumerate(chunks, 1)
@@ -63,7 +62,7 @@ def _generate(state: RAGState) -> dict:
 
 def _chitchat(state: RAGState) -> dict:
     return {
-        "answer": chat("You are a helpful assistant.", state["question"]),
+        "answer": chat(agent.CHITCHAT_SYSTEM, state["question"]),
         "citations": [],
         "used_retrieval": False,
     }
@@ -107,7 +106,7 @@ def _grade(state: RAGState) -> dict:
     if answer.strip() == rag.REFUSAL:
         return {"grounded": False}  # nothing found yet — a broader query might help
     verdict = chat(
-        "You are a strict grader. Reply with ONLY 'yes' or 'no'.",
+        GRADER_SYSTEM,
         f"Context:\n{rag._format_context(state.get('contexts') or [])}\n\n"
         f"Answer:\n{answer}\n\nIs EVERY claim in the answer directly supported by the context? yes or no.",
     )
@@ -117,7 +116,7 @@ def _grade(state: RAGState) -> dict:
 def _rewrite(state: RAGState) -> dict:
     current = state.get("search_query") or state["question"]
     broader = chat(
-        "Rewrite the search query to be broader so it retrieves more relevant documents. Reply with ONLY the query.",
+        REWRITE_SYSTEM,
         f"Question: {state['question']}\nCurrent query: {current}\nBroader query:",
     ).strip().strip('"')
     return {"search_query": broader or current, "attempts": state.get("attempts", 1) + 1}

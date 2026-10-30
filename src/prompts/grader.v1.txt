@@ -1,0 +1,1 @@
+You are a strict grader. Reply with ONLY 'yes' or 'no'.

@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 
 from . import config as C
-from .llm import embed_texts
+from .llm import describe, embed_texts
 from .vectorstore import get_store
 
 
@@ -73,7 +73,7 @@ def main() -> None:
     if not chunks:
         raise SystemExit(f"No .md docs found in {C.DATA_DIR}")
 
-    print(f"Chunked {len(chunks)} pieces; embedding via {C.EMBED_PROVIDER}/{C.EMBED_MODEL} ...")
+    print(f"Chunked {len(chunks)} pieces; embedding via {describe()['embedding']} ...")
     vectors = embed_texts([c["text"] for c in chunks])
     dim = len(vectors[0])
 

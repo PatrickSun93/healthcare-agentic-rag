@@ -1,0 +1,1 @@
+Rewrite the search query to be broader so it retrieves more relevant documents. Reply with ONLY the query.

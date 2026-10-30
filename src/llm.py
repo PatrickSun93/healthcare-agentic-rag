@@ -1,8 +1,14 @@
 """Provider abstraction for embeddings + chat. Default = local Ollama (data stays on-box).
 
 Swap providers purely via .env (LLM_PROVIDER / EMBED_PROVIDER) — the rest of the code is unaware.
+EMBED_PROVIDER=hash is a model-free stand-in so the whole pipeline (ingest -> store -> retrieve -> eval)
+runs in tests/CI without Ollama or network.
 """
 from __future__ import annotations
+
+import hashlib
+import math
+import re
 
 import httpx
 
@@ -11,6 +17,9 @@ from . import config as C
 
 # ---------------- Embeddings ----------------
 def embed_texts(texts: list[str]) -> list[list[float]]:
+    if C.EMBED_PROVIDER == "hash":
+        return [hash_embed(t) for t in texts]
+
     if C.EMBED_PROVIDER == "ollama":
         out: list[list[float]] = []
         with httpx.Client(timeout=120) as client:
@@ -35,6 +44,36 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
 
 def embed_query(text: str) -> list[float]:
     return embed_texts([text])[0]
+
+
+def hash_embed(text: str, dim: int | None = None) -> list[float]:
+    """Deterministic feature-hashing embedding: each token hashes to one of `dim` buckets with a ±1 sign,
+    then the vector is L2-normalised. Texts that share tokens land near each other, so nearest-neighbour
+    search behaves sensibly — enough to exercise stores, fusion and the eval harness. It is NOT semantic:
+    never report retrieval quality measured with it."""
+    dim = dim or C.HASH_EMBED_DIM
+    vec = [0.0] * dim
+    for tok in re.findall(r"[a-z0-9]+", text.lower()):
+        h = hashlib.blake2b(tok.encode(), digest_size=8).digest()
+        vec[int.from_bytes(h[:4], "little") % dim] += 1.0 if h[4] & 1 else -1.0
+    norm = math.sqrt(sum(x * x for x in vec)) or 1.0
+    return [x / norm for x in vec]
+
+
+def describe() -> dict[str, str]:
+    """'provider/model' ids for the active LLM + embedder — recorded in eval results so a metric change
+    can be traced to a model swap."""
+    llm = {
+        "ollama": C.LLM_MODEL,
+        "openai": C.OPENAI_LLM_MODEL,
+        "anthropic": C.ANTHROPIC_LLM_MODEL,
+    }.get(C.LLM_PROVIDER, "?")
+    emb = {
+        "ollama": C.EMBED_MODEL,
+        "openai": C.OPENAI_EMBED_MODEL,
+        "hash": f"feature-hash-{C.HASH_EMBED_DIM}d",
+    }.get(C.EMBED_PROVIDER, "?")
+    return {"llm": f"{C.LLM_PROVIDER}/{llm}", "embedding": f"{C.EMBED_PROVIDER}/{emb}"}
 
 
 # ---------------- Chat ----------------
